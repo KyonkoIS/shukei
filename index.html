@@ -276,9 +276,11 @@
     background:linear-gradient(90deg, var(--amber-dim), var(--amber));
     border-radius:100px;
     width:0%;
-    transition:width .4s ease;
+    transition:width .4s ease, background .3s ease;
   }
+  .progress-bar-fill.over{background:linear-gradient(90deg, #8c3527, var(--danger));}
   .progress-pct{margin-top:6px; font-size:12px; color:var(--ink-dim); text-align:right; min-height:14px;}
+  .progress-pct.over{color:var(--danger); font-weight:700;}
   .sub-stat-inline{margin-top:10px; font-size:13px; color:var(--ink-dim);}
   .mini-list{margin-top:14px; border-top:1px solid var(--line); padding-top:10px;}
   .mini-list .row{display:flex; justify-content:space-between; padding:8px 0; font-size:14px; border-bottom:1px solid var(--line);}
@@ -352,18 +354,20 @@
 
   #toast{
     position:fixed;
-    left:16px; right:16px; bottom:90px;
+    left:16px; right:16px; bottom:96px;
     background:var(--panel);
     border:1px solid var(--line);
     border-radius:14px;
     padding:14px 16px;
     font-size:15px;
     text-align:center;
-    transform:translateY(150%);
-    transition:transform .25s ease;
-    z-index:20;
+    opacity:0;
+    transform:translateY(12px);
+    transition:opacity .25s ease, transform .25s ease;
+    pointer-events:none;
+    z-index:40;
   }
-  #toast.show{transform:translateY(0);}
+  #toast.show{opacity:1; transform:translateY(0); pointer-events:auto;}
   #toast.ok{border-color:var(--teal); color:var(--teal);}
   #toast.err{border-color:var(--danger); color:var(--danger);}
 
@@ -495,7 +499,7 @@
       <p class="current-goal-note" id="goal-save-status" style="min-height:18px;"></p>
 
       <p class="current-goal-note" id="sync-status" style="min-height:18px; margin-top:10px;"></p>
-      <button class="lock-btn" id="sync-now-btn">前日分をいますぐ同期</button>
+      <button class="lock-btn" id="finalize-all-btn" style="border-color:var(--teal); color:var(--teal);">全員の作業終了（未確定分をまとめて送信）</button>
       <button class="lock-btn" id="refresh-workers-btn">作業者リストを更新</button>
       <button class="lock-btn" id="lock-btn">ロックする</button>
     </div>
@@ -529,7 +533,6 @@
   // 必須：Code.gsをデプロイして出たURLをここに設定してください（これが無いと一切保存されません）
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhFvpPc7OFGki_D24_i2UJ1316i8ciu8dhtEsvBKNW8jM8ZGz-UWVCqfBV0PmpLkyiTA/exec";
 
-  
   // 担当（工程）の定義。組み立てA/BはhasParts:falseにするとパーツ数の入力欄が出ません
   const PROCESSES = [
     { id: 'assemblyA', label: '組み立てA', hasParts: false },
@@ -594,18 +597,23 @@
     if (data.result !== 'success') throw new Error(data.message || 'save failed');
   }
 
-  async function isFinalized(date){
+  async function isFinalized(date, name){
     try {
-      const data = await apiCall({ action: 'isFinalized', date });
+      const data = await apiCall({ action: 'isFinalized', date, name });
       return !!(data.result === 'success' && data.finalized);
     } catch (e) {
       return false;
     }
   }
 
-  async function finalizeDay(date){
-    const data = await apiCall({ action: 'finalizeDay', date });
+  async function finalizeWorkerDay(date, name){
+    const data = await apiCall({ action: 'finalizeWorkerDay', date, name });
     return data.result === 'success';
+  }
+
+  async function finalizeAllToday(date){
+    const data = await apiCall({ action: 'finalizeAllToday', date });
+    return data.result === 'success' ? data.finalizedCount : null;
   }
 
   /* ---------- 作業者リスト（人員シート） ---------- */
@@ -905,24 +913,25 @@
     el('send-btn').disabled = false;
   }
 
-  /* ---------- 本日の作業終了（このカウンター画面から実行） ---------- */
+  /* ---------- 本日の作業終了（作業者ごとに締め切る） ---------- */
   el('finalize-today-btn').addEventListener('click', async () => {
     if (!SCRIPT_URL) {
       showToast('スプレッドシートの設定がありません', false);
       return;
     }
+    if (!currentWorker) return;
     const date = todayString();
-    if (await isFinalized(date)) {
-      showToast('本日分はすでに送信済みです', true);
+    if (await isFinalized(date, currentWorker)) {
+      showToast(`${currentWorker}さんの本日分はすでに送信済みです`, true);
       return;
     }
     showConfirm(
-      '本日の作業終了',
-      '本日の集計をスプレッドシートに送信します。送信後に入力した分はこの操作には含まれません。よろしいですか？',
+      `${currentWorker}さん 本日の作業終了`,
+      `${currentWorker}さんの本日の実績をスプレッドシートに送信します。送信後に入力した分はこの操作には含まれません。よろしいですか？`,
       '送信する',
       async () => {
         showToast('送信中です…', true);
-        const ok = await finalizeDay(date);
+        const ok = await finalizeWorkerDay(date, currentWorker);
         showToast(ok ? '本日の集計を送信しました' : '送信に失敗しました。あとで管理タブから再試行してください', ok);
       }
     );
@@ -930,7 +939,9 @@
 
   /* ---------- 進捗タブ ---------- */
   function renderProcessCardHtml(p, stats, goalUnits){
+    const isOver = goalUnits > 0 && stats.totalUnits > goalUnits;
     const pct = goalUnits > 0 ? Math.min(100, Math.round((stats.totalUnits / goalUnits) * 100)) : 0;
+    const overAmount = isOver ? stats.totalUnits - goalUnits : 0;
     const names = Object.keys(stats.byWorker).sort((a, b) => stats.byWorker[b].units - stats.byWorker[a].units);
     const rows = names.length
       ? names.map(name => {
@@ -946,8 +957,8 @@
           <span class="current">${stats.totalUnits}</span>
           <span class="goal">${goalUnits > 0 ? '/ 目標 ' + goalUnits : '/ 目標未設定'}</span>
         </div>
-        <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
-        <div class="progress-pct">${goalUnits > 0 ? pct + '%' : ''}</div>
+        <div class="progress-bar-track"><div class="progress-bar-fill${isOver ? ' over' : ''}" style="width:${pct}%"></div></div>
+        <div class="progress-pct${isOver ? ' over' : ''}">${isOver ? `目標を${overAmount}台超過` : (goalUnits > 0 ? pct + '%' : '')}</div>
         ${p.hasParts ? `<div class="sub-stat-inline">パーツ数合計: ${stats.totalParts}</div>` : ''}
         ${p.hasParts ? `<div class="mini-list">${rows}</div>` : ''}
       </div>
@@ -1072,20 +1083,18 @@
     setStatusMessage('sync-status', text, autoClearMs);
   }
 
-  el('sync-now-btn').addEventListener('click', async () => {
+  el('finalize-all-btn').addEventListener('click', async () => {
     if (!SCRIPT_URL) {
       updateSyncStatus('SCRIPT_URLが未設定です', 3000);
       return;
     }
     const date = todayString();
-    updateSyncStatus('確認中…');
-    if (await isFinalized(date)) {
-      updateSyncStatus('本日分はすでに送信済みです', 3000);
-      return;
-    }
     updateSyncStatus('送信中…');
-    const ok = await finalizeDay(date);
-    updateSyncStatus(ok ? '本日分を送信しました' : '送信に失敗しました', ok ? 3000 : 4000);
+    const count = await finalizeAllToday(date);
+    updateSyncStatus(
+      count === null ? '送信に失敗しました' : `${count}名分を送信しました（確定済みの人はスキップ）`,
+      count === null ? 4000 : 3500
+    );
   });
 
   /* ---------- 初期化 ---------- */
