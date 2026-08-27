@@ -1,1 +1,1063 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>製造カウンター</title>
+<style>
+  :root{
+    --bg:#17181a;
+    --panel:#1f2124;
+    --panel-inset:#101112;
+    --ink:#f2efe9;
+    --ink-dim:#9a9da2;
+    --line:#33363a;
+    --amber:#e8a33d;
+    --amber-dim:#7a5a26;
+    --teal:#5fa8a0;
+    --teal-dim:#2e4e4a;
+    --danger:#c1543c;
+    --radius:18px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+    overscroll-behavior:none;
+  }
+  header{
+    padding:16px 20px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    gap:10px;
+  }
+  header .title{
+    font-size:15px;
+    letter-spacing:.14em;
+    color:var(--ink-dim);
+    text-transform:uppercase;
+  }
+  header .worker{
+    font-size:18px;
+    font-weight:700;
+  }
+  .change-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-dim);
+    padding:8px 14px;
+    border-radius:100px;
+    font-size:13px;
+    white-space:nowrap;
+  }
+  main{flex:1; display:flex; flex-direction:column; padding-bottom:78px; overflow-y:auto;}
+  .view{flex:1; display:none; flex-direction:column;}
+  .view.active{display:flex;}
 
+  /* ---- 入力タブ: 作業者選択 / 工程選択 ---- */
+  #screen-select, #screen-process{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    padding:28px 20px;
+  }
+  #screen-select h1, #screen-process h1{
+    font-size:22px;
+    margin:8px 0 24px;
+    font-weight:800;
+  }
+  .btn-grid{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:14px;
+  }
+  .grid-btn{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    color:var(--ink);
+    font-size:19px;
+    font-weight:700;
+    padding:26px 10px;
+    text-align:center;
+  }
+  .grid-btn:active{
+    background:var(--amber-dim);
+    border-color:var(--amber);
+  }
+  .back-link{
+    background:none;
+    border:none;
+    color:var(--ink-dim);
+    font-size:14px;
+    text-align:left;
+    padding:0 0 16px;
+  }
+
+  /* ---- 入力タブ: カウンター ---- */
+  #screen-count{
+    display:none;
+    flex-direction:column;
+    padding:14px 16px 20px;
+    gap:16px;
+    flex:1;
+  }
+  .counter-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 18px 22px;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+  }
+  .counter-card .label{
+    font-size:15px;
+    letter-spacing:.1em;
+    color:var(--ink-dim);
+    text-transform:uppercase;
+    margin-bottom:10px;
+  }
+  .counter-card.units .label{color:#d9a464;}
+  .counter-card.parts .label{color:#7bb8b0;}
+
+  .digit-display{
+    background:var(--panel-inset);
+    border-radius:12px;
+    padding:14px 0;
+    text-align:center;
+    font-size:64px;
+    font-weight:800;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:.02em;
+    margin-bottom:16px;
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .units .digit-display{color:var(--amber); box-shadow:inset 0 0 0 1px #3a2f1c, 0 0 22px -8px rgba(232,163,61,.5);}
+  .parts .digit-display{color:var(--teal); box-shadow:inset 0 0 0 1px #1f3532, 0 0 22px -8px rgba(95,168,160,.5);}
+  .digit-display.negative{color:var(--danger) !important; box-shadow:inset 0 0 0 1px #4a2420, 0 0 22px -8px rgba(193,84,60,.6) !important;}
+
+  .stepper{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+  .step-btn{
+    border:none;
+    border-radius:14px;
+    font-size:30px;
+    font-weight:800;
+    padding:20px 0;
+    color:var(--bg);
+  }
+  .units .step-btn{background:var(--amber);}
+  .parts .step-btn{background:var(--teal);}
+  .step-btn.minus{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--line);
+  }
+
+  .actions{display:flex; gap:12px;}
+  .current-total{
+    font-size:14px;
+    color:var(--ink-dim);
+    text-align:center;
+    margin:2px 0 2px;
+  }
+  .goal-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .goal-row label{font-size:15px; color:var(--ink-dim); min-width:96px;}
+  .goal-row input{flex:1;}
+  #send-btn{
+    flex:1;
+    background:var(--amber);
+    color:#1a1200;
+    border:none;
+    border-radius:16px;
+    font-size:20px;
+    font-weight:800;
+    padding:20px 0;
+  }
+  #send-btn:active{filter:brightness(.9);}
+  #send-btn:disabled{opacity:.5;}
+  #reset-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-dim);
+    border-radius:16px;
+    padding:0 20px;
+    font-size:15px;
+  }
+
+  /* ---- 進捗タブ ---- */
+  #view-progress{padding:22px 18px 6px;}
+  .progress-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:16px;
+  }
+  .progress-header .date{font-size:14px; color:var(--ink-dim);}
+  .refresh-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-dim);
+    border-radius:100px;
+    padding:6px 14px;
+    font-size:13px;
+  }
+  .section-label{
+    font-size:13px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--ink-dim);
+    margin:4px 2px 10px;
+  }
+  #assembly-cards, #process-cards{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    margin-bottom:22px;
+  }
+  .progress-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px 18px;
+  }
+  .progress-card-title{font-size:16px; font-weight:800; margin-bottom:10px;}
+  .progress-numbers{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .progress-numbers .current{font-size:34px; font-weight:800; color:var(--amber); font-variant-numeric:tabular-nums;}
+  .progress-numbers .goal{font-size:16px; color:var(--ink-dim); font-variant-numeric:tabular-nums;}
+  .progress-bar-track{
+    background:var(--panel-inset);
+    border-radius:100px;
+    height:16px;
+    overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .progress-bar-fill{
+    height:100%;
+    background:linear-gradient(90deg, var(--amber-dim), var(--amber));
+    border-radius:100px;
+    width:0%;
+    transition:width .4s ease;
+  }
+  .progress-pct{margin-top:6px; font-size:12px; color:var(--ink-dim); text-align:right; min-height:14px;}
+  .sub-stat-inline{margin-top:10px; font-size:13px; color:var(--ink-dim);}
+  .mini-list{margin-top:14px; border-top:1px solid var(--line); padding-top:10px;}
+  .mini-list .row{display:flex; justify-content:space-between; padding:8px 0; font-size:14px; border-bottom:1px solid var(--line);}
+  .mini-list .row:last-child{border-bottom:none;}
+  .mini-list .row .stats{color:var(--ink-dim); font-variant-numeric:tabular-nums;}
+  .mini-list .empty{padding:6px 0; color:var(--ink-dim); font-size:13px;}
+
+  /* ---- 管理タブ ---- */
+  #view-admin{padding:28px 22px; gap:14px; align-items:stretch; justify-content:flex-start;}
+  #view-admin h1{font-size:20px; font-weight:800; margin:0 0 6px;}
+  #view-admin p.hint{color:var(--ink-dim); font-size:14px; margin:0 0 10px;}
+  .pin-input, .goal-input{
+    background:var(--panel-inset);
+    border:1px solid var(--line);
+    border-radius:14px;
+    color:var(--ink);
+    font-size:22px;
+    text-align:center;
+    padding:14px;
+    letter-spacing:.05em;
+    font-variant-numeric:tabular-nums;
+    width:100%;
+  }
+  select.goal-input{
+    font-size:17px;
+    text-align:left;
+    appearance:none;
+    -webkit-appearance:none;
+  }
+  .primary-btn{
+    background:var(--amber);
+    color:#1a1200;
+    border:none;
+    border-radius:16px;
+    font-size:18px;
+    font-weight:800;
+    padding:18px 0;
+  }
+  .primary-btn:disabled{opacity:.5;}
+  .lock-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-dim);
+    border-radius:16px;
+    padding:14px 0;
+    font-size:14px;
+  }
+  #admin-error{color:var(--danger); font-size:14px; min-height:18px;}
+  .current-goal-note{color:var(--ink-dim); font-size:14px; margin:0;}
+
+  /* ---- 下部タブバー ---- */
+  nav.tabbar{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    background:var(--panel);
+    border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabbar button{
+    background:none;
+    border:none;
+    color:var(--ink-dim);
+    padding:14px 0 12px;
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:.05em;
+  }
+  nav.tabbar button.active{color:var(--amber); box-shadow:inset 0 2px 0 var(--amber);}
+
+  #toast{
+    position:fixed;
+    left:16px; right:16px; bottom:90px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:14px 16px;
+    font-size:15px;
+    text-align:center;
+    transform:translateY(150%);
+    transition:transform .25s ease;
+    z-index:20;
+  }
+  #toast.show{transform:translateY(0);}
+  #toast.ok{border-color:var(--teal); color:var(--teal);}
+  #toast.err{border-color:var(--danger); color:var(--danger);}
+
+  #pending-bar{
+    display:none;
+    background:var(--danger);
+    color:#fff;
+    font-size:13px;
+    text-align:center;
+    padding:8px;
+  }
+  #pending-bar.show{display:block;}
+
+  /* ---- 作業終了 確認オーバーレイ ---- */
+  #confirm-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(10,10,10,.72);
+    z-index:30;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  #confirm-overlay.show{display:flex;}
+  .confirm-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:26px 22px;
+    width:100%;
+    max-width:360px;
+  }
+  .confirm-title{font-size:18px; font-weight:800; margin-bottom:10px;}
+  .confirm-body{font-size:16px; color:var(--ink-dim); margin-bottom:22px; line-height:1.6;}
+  .confirm-actions{display:flex; gap:10px;}
+  .confirm-actions .lock-btn{flex:1;}
+  .confirm-actions .primary-btn{flex:1.4;}
+</style>
+</head>
+<body>
+
+<div id="pending-bar"></div>
+
+<header>
+  <div>
+    <div class="title" id="header-title">製造カウンター</div>
+    <div class="worker" id="worker-name">-</div>
+  </div>
+  <button class="change-btn" id="change-worker">作業者変更</button>
+</header>
+
+<main>
+  <!-- ============ 入力タブ ============ -->
+  <div class="view active" id="view-input">
+    <div id="screen-select">
+      <div class="section-label">組立（グループ）</div>
+      <div class="btn-grid" id="assembly-select-grid"></div>
+
+      <div class="section-label" style="margin-top:22px;">作業者</div>
+      <div class="btn-grid" id="worker-grid"></div>
+    </div>
+
+    <div id="screen-process" style="display:none;">
+      <button class="back-link" id="back-to-worker">← 作業者選択に戻る</button>
+      <h1>担当を選んでください</h1>
+      <div class="btn-grid" id="process-select-grid"></div>
+    </div>
+
+    <div id="screen-count">
+      <button class="back-link" id="back-to-process" style="padding-left:2px;">← 選び直す</button>
+      <div class="current-total" id="current-total">本日の実績: -</div>
+
+      <div class="counter-card units">
+        <div class="label">台数</div>
+        <div class="digit-display" id="units-display">0</div>
+        <div class="stepper">
+          <button class="step-btn minus" data-target="units" data-delta="-1">−</button>
+          <button class="step-btn" data-target="units" data-delta="1">＋</button>
+        </div>
+      </div>
+
+      <div class="counter-card parts" id="parts-card">
+        <div class="label">パーツ数</div>
+        <div class="digit-display" id="parts-display">0</div>
+        <div class="stepper">
+          <button class="step-btn minus" data-target="parts" data-delta="-1">−</button>
+          <button class="step-btn" data-target="parts" data-delta="1">＋</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="reset-btn">リセット</button>
+        <button id="send-btn">送信</button>
+      </div>
+
+      <button class="lock-btn" id="finalize-today-btn" style="margin-top:12px; border-color:var(--teal); color:var(--teal);">本日の作業終了（集計をスプレッドシートへ送信）</button>
+    </div>
+  </div>
+
+  <!-- ============ 進捗タブ ============ -->
+  <div class="view" id="view-progress">
+    <div class="progress-header">
+      <div class="date" id="progress-date">-</div>
+      <button class="refresh-btn" id="refresh-btn">更新</button>
+    </div>
+
+    <div class="section-label">組み立て台数</div>
+    <div id="assembly-cards"></div>
+
+    <div class="section-label">工程別実績</div>
+    <div id="process-cards"></div>
+  </div>
+
+  <!-- ============ 管理タブ ============ -->
+  <div class="view" id="view-admin">
+    <div id="admin-locked">
+      <h1>工場長メニュー</h1>
+      <p class="hint">PINを入力してください</p>
+      <input type="password" inputmode="numeric" class="pin-input" id="pin-field" placeholder="••••">
+      <div id="admin-error"></div>
+      <button class="primary-btn" id="pin-submit" style="margin-top:14px;">確認</button>
+    </div>
+
+    <div id="admin-unlocked" style="display:none;">
+      <h1>工程ごとの目標台数</h1>
+      <div id="goal-inputs-list" style="display:flex; flex-direction:column; gap:12px;"></div>
+      <button class="primary-btn" id="goal-save-all" style="margin-top:6px;">まとめて更新</button>
+      <p class="current-goal-note" id="goal-save-status" style="min-height:18px;"></p>
+
+      <p class="current-goal-note" id="sync-status" style="min-height:18px; margin-top:10px;"></p>
+      <button class="lock-btn" id="sync-now-btn">前日分をいますぐ同期</button>
+      <button class="lock-btn" id="refresh-workers-btn">作業者リストを更新</button>
+      <button class="lock-btn" id="lock-btn">ロックする</button>
+    </div>
+  </div>
+</main>
+
+<nav class="tabbar">
+  <button class="tab-btn active" data-tab="input">入力</button>
+  <button class="tab-btn" data-tab="progress">進捗</button>
+  <button class="tab-btn" data-tab="admin">管理</button>
+</nav>
+
+<div id="confirm-overlay">
+  <div class="confirm-card">
+    <div class="confirm-title" id="confirm-title">訂正の送信</div>
+    <div class="confirm-body" id="confirm-body">台数 0 を訂正として送信します</div>
+    <div class="confirm-actions">
+      <button class="lock-btn" id="confirm-cancel">キャンセル</button>
+      <button class="primary-btn" id="confirm-ok">送信して終了</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ▼▼▼ ここを自分の環境に合わせて書き換えてください ▼▼▼
+  const PIN = "1234"; // 工場長PIN。運用前に変更してください（Code.gs側のPINと合わせてください）
+  // GAS未設定時や通信エラー時のフォールバック用（人員シートが取得できないときだけ使われます）
+  const WORKERS_FALLBACK = ["田中", "鈴木", "佐藤", "山本", "高橋", "伊藤"];
+  // 必須：Code.gsをデプロイして出たURLをここに設定してください（これが無いと一切保存されません）
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhFvpPc7OFGki_D24_i2UJ1316i8ciu8dhtEsvBKNW8jM8ZGz-UWVCqfBV0PmpLkyiTA/exec";
+
+  // 担当（工程）の定義。組み立てA/BはhasParts:falseにするとパーツ数の入力欄が出ません
+  const PROCESSES = [
+    { id: 'assemblyA', label: '組み立てA', hasParts: false },
+    { id: 'assemblyB', label: '組み立てB', hasParts: false },
+    { id: 'nc',        label: 'NC',        hasParts: true  },
+    { id: 'door',      label: '扉',        hasParts: true  },
+    { id: 'tenoner',   label: 'テノーナー', hasParts: true  },
+    { id: 'edge',      label: '縁貼り',    hasParts: true  },
+    { id: 'core',      label: '芯材',      hasParts: true  }
+  ];
+  // ▲▲▲ ここまで ▲▲▲
+
+  let currentWorker = null;
+  let currentProcess = null;
+  let counts = { units: 0, parts: 0 };
+  let pendingQueue = []; // 通信に失敗した記録の再送用（このセッション内のみ・リロードで消えます）
+  let progressTimer = null;
+
+  const el = (id) => document.getElementById(id);
+  const processById = (id) => PROCESSES.find(p => p.id === id);
+  const processByLabel = (label) => PROCESSES.find(p => p.label === label);
+
+  function todayString(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /* ---------- スプレッドシートAPI呼び出し ---------- */
+  async function apiCall(payload){
+    if (!SCRIPT_URL) throw new Error('SCRIPT_URL not configured');
+    const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+    return res.json();
+  }
+
+  async function getDayRecords(date){
+    const data = await apiCall({ action: 'getDayRecords', date });
+    return (data.result === 'success' && Array.isArray(data.records)) ? data.records : [];
+  }
+
+  async function addRecord(record){
+    const data = await apiCall({
+      action: 'addRecord',
+      date: todayString(),
+      name: record.name,
+      process: record.process,
+      units: record.units,
+      parts: record.parts
+    });
+    if (data.result !== 'success') throw new Error(data.message || 'save failed');
+  }
+
+  async function getGoals(date){
+    const data = await apiCall({ action: 'getGoals', date });
+    return (data.result === 'success' && data.goals) ? data.goals : {};
+  }
+
+  async function setGoalsBatch(date, goals){
+    const data = await apiCall({ action: 'setGoalsBatch', date, goals, pin: PIN });
+    if (data.result !== 'success') throw new Error(data.message || 'save failed');
+  }
+
+  async function isFinalized(date){
+    try {
+      const data = await apiCall({ action: 'isFinalized', date });
+      return !!(data.result === 'success' && data.finalized);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function finalizeDay(date){
+    const data = await apiCall({ action: 'finalizeDay', date });
+    return data.result === 'success';
+  }
+
+  /* ---------- 作業者リスト（人員シート） ---------- */
+  async function fetchWorkers(){
+    try {
+      const data = await apiCall({ action: 'getWorkers' });
+      if (data.result === 'success' && Array.isArray(data.workers) && data.workers.length) {
+        return data.workers;
+      }
+    } catch (e) {}
+    return WORKERS_FALLBACK;
+  }
+
+  async function initWorkers(){
+    const list = await fetchWorkers();
+    renderWorkerGrid(list);
+  }
+
+  /* ---------- タブ切り替え ---------- */
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  function switchTab(tab){
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    el('view-' + tab).classList.add('active');
+
+    el('header-title').textContent = tab === 'input' ? '製造カウンター' : (tab === 'progress' ? '本日の進捗' : '工場長メニュー');
+    el('change-worker').style.display = tab === 'input' ? 'inline-block' : 'none';
+    el('worker-name').style.display = tab === 'input' ? 'block' : 'none';
+
+    if (tab === 'progress') {
+      fetchStatus();
+      progressTimer = setInterval(fetchStatus, 15000);
+    } else if (progressTimer) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+  }
+
+  /* ---------- 入力タブ：作業者選択 ---------- */
+  function renderWorkerGrid(list){
+    const grid = el('worker-grid');
+    grid.innerHTML = '';
+    list.forEach(name => {
+      const btn = document.createElement('button');
+      btn.className = 'grid-btn';
+      btn.textContent = name;
+      btn.onclick = () => selectWorker(name);
+      grid.appendChild(btn);
+    });
+  }
+
+  function selectWorker(name){
+    isGroupEntry = false;
+    currentWorker = name;
+    el('worker-name').textContent = name;
+    el('screen-select').style.display = 'none';
+    el('screen-process').style.display = 'flex';
+  }
+
+  el('back-to-worker').addEventListener('click', () => {
+    currentWorker = null;
+    el('worker-name').textContent = '-';
+    el('screen-process').style.display = 'none';
+    el('screen-select').style.display = 'flex';
+  });
+
+  /* ---------- 入力タブ：組立グループ（作業者選択画面内） ---------- */
+  function renderAssemblyGrid(){
+    const grid = el('assembly-select-grid');
+    grid.innerHTML = '';
+    PROCESSES.filter(p => !p.hasParts).forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'grid-btn';
+      btn.textContent = p.label;
+      btn.onclick = () => selectAssemblyGroup(p.id);
+      grid.appendChild(btn);
+    });
+  }
+
+  let isGroupEntry = false;
+
+  function selectAssemblyGroup(processId){
+    const p = processById(processId);
+    isGroupEntry = true;
+    currentWorker = p.label; // 個人ではなく「組み立てA/B」というグループ名で記録する
+    currentProcess = processId;
+    el('worker-name').textContent = p.label;
+    el('parts-card').style.display = 'none';
+    resetCounts();
+    el('screen-select').style.display = 'none';
+    el('screen-process').style.display = 'none';
+    el('screen-count').style.display = 'flex';
+    updateCurrentTotalDisplay();
+  }
+
+  /* ---------- 入力タブ：工程選択（加工のみ） ---------- */
+  function renderProcessGrid(){
+    const processGrid = el('process-select-grid');
+    processGrid.innerHTML = '';
+    PROCESSES.filter(p => p.hasParts).forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'grid-btn';
+      btn.textContent = p.label;
+      btn.onclick = () => selectProcess(p.id);
+      processGrid.appendChild(btn);
+    });
+  }
+
+  function selectProcess(processId){
+    isGroupEntry = false;
+    currentProcess = processId;
+    const p = processById(processId);
+    el('worker-name').textContent = `${currentWorker} ・ ${p.label}`;
+    el('parts-card').style.display = p.hasParts ? 'flex' : 'none';
+    resetCounts();
+    el('screen-process').style.display = 'none';
+    el('screen-count').style.display = 'flex';
+    updateCurrentTotalDisplay();
+  }
+
+  el('back-to-process').addEventListener('click', () => {
+    currentProcess = null;
+    el('screen-count').style.display = 'none';
+    if (isGroupEntry) {
+      currentWorker = null;
+      el('worker-name').textContent = '-';
+      el('screen-select').style.display = 'flex';
+    } else {
+      el('worker-name').textContent = currentWorker;
+      el('screen-process').style.display = 'flex';
+    }
+  });
+
+  async function getTodayTotal(name, processId){
+    const p = processById(processId);
+    const date = todayString();
+    const records = await getDayRecords(date);
+    let units = 0, parts = 0;
+    records.forEach(r => {
+      if (r.name === name && r.process === p.label) {
+        units += Number(r.units) || 0;
+        parts += Number(r.parts) || 0;
+      }
+    });
+    return { units, parts };
+  }
+
+  async function updateCurrentTotalDisplay(){
+    if (!currentWorker || !currentProcess) return;
+    const p = processById(currentProcess);
+    const totals = await getTodayTotal(currentWorker, currentProcess);
+    el('current-total').textContent = p.hasParts
+      ? `本日の実績: 台数 ${totals.units} ／ パーツ ${totals.parts}`
+      : `本日の実績: 台数 ${totals.units}`;
+  }
+
+  /* ---------- 入力タブ：カウンター ---------- */
+  function resetCounts(){
+    counts = { units: 0, parts: 0 };
+    updateDisplay();
+  }
+
+  function updateDisplay(){
+    const unitsEl = el('units-display');
+    const partsEl = el('parts-display');
+    unitsEl.textContent = counts.units;
+    partsEl.textContent = counts.parts;
+    unitsEl.classList.toggle('negative', counts.units < 0);
+    partsEl.classList.toggle('negative', counts.parts < 0);
+  }
+
+  document.querySelectorAll('.step-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target;
+      const delta = parseInt(btn.dataset.delta, 10);
+      counts[target] = counts[target] + delta; // 訂正用にマイナスも許可
+      updateDisplay();
+    });
+  });
+
+  el('change-worker').addEventListener('click', () => {
+    currentWorker = null;
+    currentProcess = null;
+    el('worker-name').textContent = '-';
+    el('screen-count').style.display = 'none';
+    el('screen-process').style.display = 'none';
+    el('screen-select').style.display = 'flex';
+  });
+
+  el('reset-btn').addEventListener('click', resetCounts);
+
+  function showToast(msg, ok){
+    const t = el('toast');
+    t.textContent = msg;
+    t.className = 'show ' + (ok ? 'ok' : 'err');
+    setTimeout(() => { t.className = ''; }, 2200);
+  }
+
+  function updatePendingBar(){
+    el('pending-bar').className = pendingQueue.length ? 'show' : '';
+    el('pending-bar').textContent = pendingQueue.length
+      ? `未送信データが${pendingQueue.length}件あります。タップで再送。`
+      : '';
+  }
+  el('pending-bar').addEventListener('click', flushQueue);
+
+  async function flushQueue(){
+    if (!pendingQueue.length) return;
+    const remaining = [];
+    for (const record of pendingQueue) {
+      try {
+        await addRecord(record);
+      } catch (e) {
+        remaining.push(record);
+      }
+    }
+    pendingQueue = remaining;
+    updatePendingBar();
+    if (!pendingQueue.length) showToast('未送信データを送信しました', true);
+  }
+
+  el('send-btn').addEventListener('click', async () => {
+    if (!currentWorker || !currentProcess) return;
+    if (counts.units === 0 && counts.parts === 0) {
+      showToast('台数かパーツ数を入力してください', false);
+      return;
+    }
+    const isCorrection = counts.units < 0 || counts.parts < 0;
+    if (isCorrection) {
+      const p = processById(currentProcess);
+      showConfirm(
+        `${currentWorker}さん ${p.label} 訂正の送信`,
+        `台数 ${counts.units}${p.hasParts ? ' / パーツ ' + counts.parts : ''} を訂正として送信します（多く入力した分を減らします）`,
+        '送信して終了',
+        doSend
+      );
+      return;
+    }
+    await doSend();
+  });
+
+  let confirmCallback = null;
+
+  function showConfirm(title, body, okLabel, callback){
+    el('confirm-title').textContent = title;
+    el('confirm-body').textContent = body;
+    el('confirm-ok').textContent = okLabel;
+    confirmCallback = callback;
+    el('confirm-overlay').classList.add('show');
+  }
+
+  el('confirm-cancel').addEventListener('click', () => {
+    el('confirm-overlay').classList.remove('show');
+    confirmCallback = null;
+  });
+
+  el('confirm-ok').addEventListener('click', async () => {
+    el('confirm-overlay').classList.remove('show');
+    const cb = confirmCallback;
+    confirmCallback = null;
+    if (cb) await cb();
+  });
+
+  async function doSend(){
+    const worker = currentWorker;
+    const p = processById(currentProcess);
+    const record = { name: worker, process: p.label, units: counts.units, parts: counts.parts };
+    el('send-btn').disabled = true;
+    try {
+      await addRecord(record);
+      showToast(`送信しました（${p.label} 台数${record.units}${p.hasParts ? ' / パーツ' + record.parts : ''}）`, true);
+      resetCounts();
+      await updateCurrentTotalDisplay();
+    } catch (e) {
+      pendingQueue.push(record);
+      updatePendingBar();
+      showToast('保存に失敗しました。あとで再送してください', false);
+    }
+    el('send-btn').disabled = false;
+  }
+
+  /* ---------- 本日の作業終了（このカウンター画面から実行） ---------- */
+  el('finalize-today-btn').addEventListener('click', async () => {
+    if (!SCRIPT_URL) {
+      showToast('スプレッドシートの設定がありません', false);
+      return;
+    }
+    const date = todayString();
+    if (await isFinalized(date)) {
+      showToast('本日分はすでに送信済みです', true);
+      return;
+    }
+    showConfirm(
+      '本日の作業終了',
+      '本日の集計をスプレッドシートに送信します。送信後に入力した分はこの操作には含まれません。よろしいですか？',
+      '送信する',
+      async () => {
+        showToast('送信中です…', true);
+        const ok = await finalizeDay(date);
+        showToast(ok ? '本日の集計を送信しました' : '送信に失敗しました。あとで管理タブから再試行してください', ok);
+      }
+    );
+  });
+
+  /* ---------- 進捗タブ ---------- */
+  function renderProcessCardHtml(p, stats, goalUnits){
+    const pct = goalUnits > 0 ? Math.min(100, Math.round((stats.totalUnits / goalUnits) * 100)) : 0;
+    const names = Object.keys(stats.byWorker).sort((a, b) => stats.byWorker[b].units - stats.byWorker[a].units);
+    const rows = names.length
+      ? names.map(name => {
+          const w = stats.byWorker[name];
+          return `<div class="row"><span>${name}</span><span class="stats">台数 ${w.units}${p.hasParts ? ' ／ パーツ ' + w.parts : ''}</span></div>`;
+        }).join('')
+      : '<div class="empty">まだ本日の記録がありません</div>';
+
+    return `
+      <div class="progress-card">
+        <div class="progress-card-title">${p.label}</div>
+        <div class="progress-numbers">
+          <span class="current">${stats.totalUnits}</span>
+          <span class="goal">${goalUnits > 0 ? '/ 目標 ' + goalUnits : '/ 目標未設定'}</span>
+        </div>
+        <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+        <div class="progress-pct">${goalUnits > 0 ? pct + '%' : ''}</div>
+        ${p.hasParts ? `<div class="sub-stat-inline">パーツ数合計: ${stats.totalParts}</div>` : ''}
+        ${p.hasParts ? `<div class="mini-list">${rows}</div>` : ''}
+      </div>
+    `;
+  }
+
+  async function fetchStatus(){
+    const date = todayString();
+    el('progress-date').textContent = date;
+    try {
+      const [records, goals] = await Promise.all([getDayRecords(date), getGoals(date)]);
+
+      const byProcess = {};
+      PROCESSES.forEach(p => { byProcess[p.id] = { totalUnits: 0, totalParts: 0, byWorker: {} }; });
+      records.forEach(r => {
+        const p = processByLabel(r.process);
+        if (!p) return;
+        const bucket = byProcess[p.id];
+        bucket.totalUnits += Number(r.units) || 0;
+        bucket.totalParts += Number(r.parts) || 0;
+        if (!bucket.byWorker[r.name]) bucket.byWorker[r.name] = { units: 0, parts: 0 };
+        bucket.byWorker[r.name].units += Number(r.units) || 0;
+        bucket.byWorker[r.name].parts += Number(r.parts) || 0;
+      });
+
+      const assemblyHtml = PROCESSES.filter(p => !p.hasParts)
+        .map(p => renderProcessCardHtml(p, byProcess[p.id], goals[p.label] || 0)).join('');
+      const processHtml = PROCESSES.filter(p => p.hasParts)
+        .map(p => renderProcessCardHtml(p, byProcess[p.id], goals[p.label] || 0)).join('');
+
+      el('assembly-cards').innerHTML = assemblyHtml;
+      el('process-cards').innerHTML = processHtml;
+    } catch (e) {
+      showToast('進捗の取得に失敗しました', false);
+    }
+  }
+
+  el('refresh-btn').addEventListener('click', fetchStatus);
+
+  /* ---------- 管理タブ ---------- */
+  let unlocked = false;
+
+  function renderGoalInputsList(){
+    el('goal-inputs-list').innerHTML = PROCESSES.map(p => `
+      <div class="goal-row">
+        <label>${p.label}</label>
+        <input type="number" inputmode="numeric" class="goal-input" id="goal-input-${p.id}" placeholder="例: 50">
+      </div>
+    `).join('');
+  }
+
+  async function loadAllGoals(){
+    const date = todayString();
+    try {
+      const goals = await getGoals(date);
+      PROCESSES.forEach(p => {
+        const input = el('goal-input-' + p.id);
+        const val = goals[p.label];
+        if (input) input.value = val > 0 ? val : '';
+      });
+    } catch (e) {}
+  }
+
+  el('pin-submit').addEventListener('click', () => {
+    const pin = el('pin-field').value;
+    el('admin-error').textContent = '';
+    if (pin === PIN) {
+      unlocked = true;
+      el('admin-locked').style.display = 'none';
+      el('admin-unlocked').style.display = 'block';
+      loadAllGoals();
+    } else {
+      el('admin-error').textContent = 'PINが違います';
+    }
+  });
+
+  el('goal-save-all').addEventListener('click', async () => {
+    const date = todayString();
+    const goalsPayload = {};
+    PROCESSES.forEach(p => {
+      const input = el('goal-input-' + p.id);
+      const val = parseInt(input.value, 10);
+      if (val > 0) goalsPayload[p.label] = val;
+    });
+
+    el('goal-save-all').disabled = true;
+    el('goal-save-status').textContent = '保存中…';
+    try {
+      await setGoalsBatch(date, goalsPayload);
+      el('goal-save-status').textContent = '全工程の目標を更新しました';
+      showToast('目標をまとめて更新しました', true);
+    } catch (e) {
+      el('goal-save-status').textContent = '保存に失敗しました: ' + e.message;
+    }
+    el('goal-save-all').disabled = false;
+  });
+
+  el('lock-btn').addEventListener('click', () => {
+    unlocked = false;
+    el('pin-field').value = '';
+    el('admin-unlocked').style.display = 'none';
+    el('admin-locked').style.display = 'block';
+  });
+
+  el('refresh-workers-btn').addEventListener('click', async () => {
+    await initWorkers();
+    showToast('作業者リストを更新しました', true);
+  });
+
+  function updateSyncStatus(text){
+    const note = el('sync-status');
+    if (note) note.textContent = text;
+  }
+
+  el('sync-now-btn').addEventListener('click', async () => {
+    if (!SCRIPT_URL) {
+      updateSyncStatus('SCRIPT_URLが未設定です');
+      return;
+    }
+    const date = todayString();
+    updateSyncStatus('確認中…');
+    if (await isFinalized(date)) {
+      updateSyncStatus('本日分はすでに送信済みです');
+      return;
+    }
+    updateSyncStatus('送信中…');
+    const ok = await finalizeDay(date);
+    updateSyncStatus(ok ? '本日分を送信しました' : '送信に失敗しました');
+  });
+
+  /* ---------- 初期化 ---------- */
+  if (!SCRIPT_URL) {
+    el('pending-bar').className = 'show';
+    el('pending-bar').textContent = 'SCRIPT_URLが未設定です。Apps ScriptのURLを設定してください。';
+  }
+  renderAssemblyGrid();
+  renderProcessGrid();
+  renderGoalInputsList();
+  el('worker-name').style.display = 'block';
+  initWorkers();
+</script>
+</body>
+</html>
