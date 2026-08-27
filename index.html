@@ -144,6 +144,20 @@
     align-items:center;
     justify-content:center;
   }
+  input.digit-display{
+    border:none;
+    outline:none;
+    width:100%;
+    font-family:inherit;
+    -moz-appearance:textfield;
+  }
+  input.digit-display::-webkit-outer-spin-button,
+  input.digit-display::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  input.digit-display:focus{box-shadow:0 0 0 2px var(--amber) inset;}
+  .parts input.digit-display:focus{box-shadow:0 0 0 2px var(--teal) inset;}
   .units .digit-display{color:var(--amber); box-shadow:inset 0 0 0 1px #3a2f1c, 0 0 22px -8px rgba(232,163,61,.5);}
   .parts .digit-display{color:var(--teal); box-shadow:inset 0 0 0 1px #1f3532, 0 0 22px -8px rgba(95,168,160,.5);}
   .digit-display.negative{color:var(--danger) !important; box-shadow:inset 0 0 0 1px #4a2420, 0 0 22px -8px rgba(193,84,60,.6) !important;}
@@ -425,7 +439,7 @@
 
       <div class="counter-card units">
         <div class="label">台数</div>
-        <div class="digit-display" id="units-display">0</div>
+        <input type="number" inputmode="numeric" class="digit-display" id="units-display" value="0">
         <div class="stepper">
           <button class="step-btn minus" data-target="units" data-delta="-1">−</button>
           <button class="step-btn" data-target="units" data-delta="1">＋</button>
@@ -434,7 +448,7 @@
 
       <div class="counter-card parts" id="parts-card">
         <div class="label">パーツ数</div>
-        <div class="digit-display" id="parts-display">0</div>
+        <input type="number" inputmode="numeric" class="digit-display" id="parts-display" value="0">
         <div class="stepper">
           <button class="step-btn minus" data-target="parts" data-delta="-1">−</button>
           <button class="step-btn" data-target="parts" data-delta="1">＋</button>
@@ -759,8 +773,8 @@
   function updateDisplay(){
     const unitsEl = el('units-display');
     const partsEl = el('parts-display');
-    unitsEl.textContent = counts.units;
-    partsEl.textContent = counts.parts;
+    unitsEl.value = counts.units;
+    partsEl.value = counts.parts;
     unitsEl.classList.toggle('negative', counts.units < 0);
     partsEl.classList.toggle('negative', counts.parts < 0);
   }
@@ -772,6 +786,18 @@
       counts[target] = counts[target] + delta; // 訂正用にマイナスも許可
       updateDisplay();
     });
+  });
+
+  // 数字を直接タップして打ち込む場合の同期
+  ['units', 'parts'].forEach(target => {
+    const input = el(target + '-display');
+    input.addEventListener('input', () => {
+      const val = parseInt(input.value, 10);
+      counts[target] = isNaN(val) ? 0 : val;
+      input.classList.toggle('negative', counts[target] < 0);
+    });
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('blur', () => updateDisplay()); // 空欄などを正しい表示に戻す
   });
 
   el('change-worker').addEventListener('click', () => {
@@ -1007,10 +1033,10 @@
     el('goal-save-status').textContent = '保存中…';
     try {
       await setGoalsBatch(date, goalsPayload);
-      el('goal-save-status').textContent = '全工程の目標を更新しました';
+      setStatusMessage('goal-save-status', '全工程の目標を更新しました', 3000);
       showToast('目標をまとめて更新しました', true);
     } catch (e) {
-      el('goal-save-status').textContent = '保存に失敗しました: ' + e.message;
+      setStatusMessage('goal-save-status', '保存に失敗しました: ' + e.message, 4000);
     }
     el('goal-save-all').disabled = false;
   });
@@ -1027,25 +1053,35 @@
     showToast('作業者リストを更新しました', true);
   });
 
-  function updateSyncStatus(text){
-    const note = el('sync-status');
-    if (note) note.textContent = text;
+  function setStatusMessage(elementId, text, autoClearMs){
+    const node = el(elementId);
+    if (!node) return;
+    node.textContent = text;
+    if (autoClearMs) {
+      setTimeout(() => {
+        if (node.textContent === text) node.textContent = '';
+      }, autoClearMs);
+    }
+  }
+
+  function updateSyncStatus(text, autoClearMs){
+    setStatusMessage('sync-status', text, autoClearMs);
   }
 
   el('sync-now-btn').addEventListener('click', async () => {
     if (!SCRIPT_URL) {
-      updateSyncStatus('SCRIPT_URLが未設定です');
+      updateSyncStatus('SCRIPT_URLが未設定です', 3000);
       return;
     }
     const date = todayString();
     updateSyncStatus('確認中…');
     if (await isFinalized(date)) {
-      updateSyncStatus('本日分はすでに送信済みです');
+      updateSyncStatus('本日分はすでに送信済みです', 3000);
       return;
     }
     updateSyncStatus('送信中…');
     const ok = await finalizeDay(date);
-    updateSyncStatus(ok ? '本日分を送信しました' : '送信に失敗しました');
+    updateSyncStatus(ok ? '本日分を送信しました' : '送信に失敗しました', ok ? 3000 : 4000);
   });
 
   /* ---------- 初期化 ---------- */
