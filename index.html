@@ -811,11 +811,14 @@
 
   el('reset-btn').addEventListener('click', resetCounts);
 
+  let toastTimer = null;
+
   function showToast(msg, ok){
     const t = el('toast');
     t.textContent = msg;
     t.className = 'show ' + (ok ? 'ok' : 'err');
-    setTimeout(() => { t.className = ''; }, 2200);
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = ''; toastTimer = null; }, 2200);
   }
 
   function updatePendingBar(){
@@ -1016,7 +1019,7 @@
       el('admin-unlocked').style.display = 'block';
       loadAllGoals();
     } else {
-      el('admin-error').textContent = 'PINが違います';
+      setStatusMessage('admin-error', 'PINが違います', 3000);
     }
   });
 
