@@ -597,18 +597,10 @@
     if (data.result !== 'success') throw new Error(data.message || 'save failed');
   }
 
-  async function isFinalized(date, name){
-    try {
-      const data = await apiCall({ action: 'isFinalized', date, name });
-      return !!(data.result === 'success' && data.finalized);
-    } catch (e) {
-      return false;
-    }
-  }
-
+  // finalized: true = 新しいデータがあり送信した / false = 新しいデータが無かった
   async function finalizeWorkerDay(date, name){
     const data = await apiCall({ action: 'finalizeWorkerDay', date, name });
-    return data.result === 'success';
+    return data.result === 'success' && data.finalized;
   }
 
   async function finalizeAllToday(date){
@@ -913,26 +905,22 @@
     el('send-btn').disabled = false;
   }
 
-  /* ---------- 本日の作業終了（作業者ごとに締め切る） ---------- */
-  el('finalize-today-btn').addEventListener('click', async () => {
+  /* ---------- 本日の作業終了（作業者ごと・何度でも実行可能） ---------- */
+  el('finalize-today-btn').addEventListener('click', () => {
     if (!SCRIPT_URL) {
       showToast('スプレッドシートの設定がありません', false);
       return;
     }
     if (!currentWorker) return;
-    const date = todayString();
-    if (await isFinalized(date, currentWorker)) {
-      showToast(`${currentWorker}さんの本日分はすでに送信済みです`, true);
-      return;
-    }
     showConfirm(
       `${currentWorker}さん 本日の作業終了`,
-      `${currentWorker}さんの本日の実績をスプレッドシートに送信します。送信後に入力した分はこの操作には含まれません。よろしいですか？`,
+      `${currentWorker}さんのここまでの実績をスプレッドシートに送信します。まだ続きがある場合は、続けて入力してから、またこのボタンを押せば追加分だけ送信されます。よろしいですか？`,
       '送信する',
       async () => {
         showToast('送信中です…', true);
-        const ok = await finalizeWorkerDay(date, currentWorker);
-        showToast(ok ? '本日の集計を送信しました' : '送信に失敗しました。あとで管理タブから再試行してください', ok);
+        const date = todayString();
+        const finalized = await finalizeWorkerDay(date, currentWorker);
+        showToast(finalized ? '本日の実績を送信しました' : '前回の送信より後の新しい入力はありませんでした', finalized);
       }
     );
   });
@@ -1092,7 +1080,9 @@
     updateSyncStatus('送信中…');
     const count = await finalizeAllToday(date);
     updateSyncStatus(
-      count === null ? '送信に失敗しました' : `${count}名分を送信しました（確定済みの人はスキップ）`,
+      count === null ? '送信に失敗しました' :
+      count === 0 ? '新しい入力はありませんでした' :
+      `${count}名分の新しい実績を送信しました`,
       count === null ? 4000 : 3500
     );
   });
